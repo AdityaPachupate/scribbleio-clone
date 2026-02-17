@@ -1,5 +1,4 @@
 ﻿namespace scribble.API.Models
-namespace ScribbleGame.API.Models
 {
     /// <summary>
     /// Represents a game room/session
@@ -69,4 +68,4 @@ namespace ScribbleGame.API.Models
         public bool IsSystemMessage { get; set; }
         public bool IsCorrectGuess { get; set; }
     }
-}
+} 

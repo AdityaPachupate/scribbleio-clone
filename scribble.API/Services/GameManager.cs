@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc.Diagnostics;
 using scribble.API.Models;
-using scribble.API.Models.ScribbleGame.API.Models;
 using System.Collections.Concurrent;
 
 namespace scribble.API.Services
