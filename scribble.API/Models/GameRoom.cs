@@ -1,8 +1,5 @@
 ﻿namespace scribble.API.Models
 {
-    /// <summary>
-    /// Represents a game room/session
-    /// </summary>
     public class GameRoom
     {
         // 6-character unique code (e.g., "ABC123")
@@ -45,9 +42,6 @@
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
-    /// <summary>
-    /// Game state enum
-    /// </summary>
     public enum GameState
     {
         Waiting,      // Waiting for players to join
@@ -57,9 +51,7 @@
         GameEnd       // (Future: Game completely over)
     }
 
-    /// <summary>
-    /// Chat message model
-    /// </summary>
+
     public class ChatMessage
     {
         public string Username { get; set; } = string.Empty;
