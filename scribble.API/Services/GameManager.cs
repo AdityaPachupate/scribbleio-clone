@@ -151,10 +151,6 @@ namespace scribble.API.Services
         {
             return _rooms.Values.ToList();
         }
-
-        /// <summary>
-        /// Generate a random room code
-        /// </summary>
         public string GenerateRoomCode()
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

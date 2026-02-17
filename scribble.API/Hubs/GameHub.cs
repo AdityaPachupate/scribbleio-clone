@@ -87,4 +87,139 @@ public class GameHub : Hub
             _logger.LogInformation($"{username} joined room {roomCode}");
         }
     }
+
+    public async Task StartRound(string roomCode)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        if (room.Players.Count < 2)
+        {
+            await Clients.Caller.SendAsync("Error", "Need at least 2 players to start");
+            return;
+        }
+
+        _gameManager.StartNewRound(roomCode);
+
+        var drawer = room.Players.First(p => p.IsDrawing);
+        await Clients.Client(drawer.ConnectionId).SendAsync("YourTurnToDraw", new
+        {
+            word = room.CurrentWord,
+            roundDuration = room.RoundDurationSeconds
+        });
+
+        var maskedWord = _gameManager.GetMaskedWord(roomCode);
+        await Clients.GroupExcept(roomCode, drawer.ConnectionId).SendAsync("RoundStarted", new
+        {
+            drawer = drawer.Username,
+            wordLength = room.CurrentWord.Length,
+            maskedWord = maskedWord,
+            roundDuration = room.RoundDurationSeconds
+        });
+        _logger.LogInformation($"Game started in room {roomCode}");
+    }
+
+    public async Task SendDrawing(string roomCode, DrawingData drawingData)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        // Verify sender is the current drawer
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player == null || !player.IsDrawing) return;
+
+        // Broadcast to everyone EXCEPT the sender
+        // (sender already has it on their own canvas)
+        await Clients.OthersInGroup(roomCode).SendAsync("ReceiveDrawing", drawingData);
+    }
+
+    public async Task SendMessage(string roomCode, string message)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player == null) return;
+
+        if (player.IsDrawing)
+        {
+            var chatMsg = new ChatMessage
+            {
+                Username = player.Username,
+                Message = message
+            };
+            room.ChatHistory.Add(chatMsg);
+            await Clients.Group(roomCode).SendAsync("ReceiveMessage", chatMsg);
+            return;
+        }
+
+        var isCorrect = _gameManager.CheckGuess(roomCode, Context.ConnectionId, message);
+
+        if (isCorrect)
+        {
+            var correctMsg = new ChatMessage
+            {
+                Username = "System",
+                Message = $"{player.Username} guesses the word!",
+                IsSystemMessage = true,
+                IsCorrectGuess = true
+
+            };
+            room.ChatHistory.Add(correctMsg);
+
+            await Clients.Group(roomCode).SendAsync("CorrectGuess", new
+            {
+                username = player.Username,
+                score = player.Score
+            });
+
+            await Clients.Group(roomCode).SendAsync("ReceiveMessage", correctMsg);
+            // Update player scores
+            await Clients.Group(roomCode).SendAsync("PlayersUpdated", room.Players);
+
+            // Check if all non-drawers have guessed
+            var allGuessed = room.Players
+                .Where(p => !p.IsDrawing)
+                .All(p => p.HasGuessedCorrectly);
+            if (allGuessed)
+            {
+                await EndRound(roomCode);
+            }
+        }
+        else
+        {
+            // Regular chat message
+            var chatMsg = new ChatMessage
+            {
+                Username = player.Username,
+                Message = message
+            };
+            room.ChatHistory.Add(chatMsg);
+            await Clients.Group(roomCode).SendAsync("ReceiveMessage", chatMsg);
+        }
+    }
+
+    public async Task EndRound(string roomCode)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        room.State = GameState.RoundEnd;
+
+        // Show results to everyone
+        await Clients.Group(roomCode).SendAsync("RoundEnded", new
+        {
+            word = room.CurrentWord,
+            players = room.Players.OrderByDescending(p => p.Score).ToList()
+        });
+
+        _logger.LogInformation($"Round ended in room {roomCode}");
+    }
+
 }
+
+
+
+
+
+
