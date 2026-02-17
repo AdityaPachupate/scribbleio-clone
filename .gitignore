@@ -1,0 +1,110 @@
+# .gitignore for a combined .NET Core + Angular project
+# Place this file at the repository root
+
+# =======================
+# OS / Editor / Tools
+# =======================
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Visual Studio / VS Code / Rider
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.iml
+_ReSharper*/
+*.DotSettings.user
+
+# =======================
+# .NET / Visual Studio
+# =======================
+# Build outputs
+bin/
+obj/
+out/
+publish/
+
+# Test results and coverage
+TestResults/
+*.trx
+coverage/
+*.coverage
+*.coveragexml
+*.lcov
+.vstest/
+
+# NuGet
+packages/
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# EF / Local DB
+*.db
+*.mdf
+*.ldf
+
+# ASP.NET Core user secrets
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# =======================
+# Node / Angular
+# =======================
+# Node dependencies
+node_modules/
+ClientApp/node_modules/
+**/node_modules/
+
+# Angular build / caches
+dist/
+ClientApp/dist/
+out-tsc/
+.tmp/
+.temp/
+.angular/
+.angular/cache/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files (do not commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+npm-packages-offline-cache/
+package-lock.json
+.pnp/
+.pnp.js
+
+# Optional: ignore local Angular/CICD artifacts
+.husky/_/
+coverage/
+
+# =======================
+# Misc
+# =======================
+# JetBrains / Rider caches
+.idea/
+*.iml
+
+# Generated files
+*.db
+*.sql
+*.sqlite
+
+# End of file
