@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -47,7 +47,8 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private signalrService: SignalrService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef  // Add this
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -97,14 +98,16 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((data) => {
         console.log('Player joined:', data);
         this.players = data.players || [];
+        this.cdr.markForCheck();  // ✅ Force update
       });
 
-    // Players updated (THIS WAS MISSING!)
+    // Players updated
     this.signalrService.playersUpdated$
       .pipe(takeUntil(this.destroy$))
       .subscribe((players) => {
         console.log('Players updated:', players);
         this.players = players;
+        this.cdr.markForCheck();  // ✅ Force update
       });
 
     // Player left
@@ -113,6 +116,7 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((data) => {
         console.log('Player left:', data);
         this.players = data.players || [];
+        this.cdr.markForCheck();  // ✅ Force update
       });
 
     // Receive drawing
