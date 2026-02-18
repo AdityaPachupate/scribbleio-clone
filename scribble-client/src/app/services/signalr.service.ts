@@ -3,12 +3,14 @@ import * as signalR from '@microsoft/signalr';
 import { Subject } from 'rxjs';
 
 // Define interfaces for type safety
-export interface Player {
-  connectionId: string;
-  username: string;
-  score: number;
-  isDrawing: boolean;
-  hasGuessedCorrectly: boolean;
+export interface DrawingData {
+  x: number;
+  y: number;
+  prevX: number;
+  prevY: number;
+  color: string;
+  lineWidth: number;
+  action: string;  // "draw" or "clear"
 }
 
 export interface ChatMessage {
@@ -19,14 +21,12 @@ export interface ChatMessage {
   isCorrectGuess: boolean;
 }
 
-export interface DrawingData {
-  x: number;
-  y: number;
-  prevX: number;
-  prevY: number;
-  color: string;
-  lineWidth: number;
-  action: string;
+export interface Player {
+  connectionId: string;
+  username: string;
+  score: number;
+  isDrawing: boolean;
+  hasGuessedCorrectly: boolean;
 }
 
 @Injectable({
@@ -140,7 +140,7 @@ export class SignalrService {
   }
 
   async startGame(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('StartGame', roomCode);
+    await this.hubConnection.invoke('StartRound', roomCode);  // Changed from StartGame
   }
 
   async sendDrawing(roomCode: string, data: DrawingData): Promise<void> {
@@ -161,6 +161,14 @@ export class SignalrService {
 
   async clearCanvas(roomCode: string): Promise<void> {
     await this.hubConnection.invoke('ClearCanvas', roomCode);
+  }
+
+  async leaveRoom(roomCode: string): Promise<void> {
+    await this.disconnect();
+  }
+
+  async startNextRound(roomCode: string): Promise<void> {
+    await this.hubConnection.invoke('NextRound', roomCode);
   }
 
   async disconnect(): Promise<void> {
