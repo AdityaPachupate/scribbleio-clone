@@ -51,15 +51,23 @@ export class SignalrService {
   public clearCanvas$ = new Subject<void>();
   public error$ = new Subject<string>();
 
-  constructor() {}
+  constructor() { }
+
+  public get isConnected(): boolean {
+    return this.hubConnection?.state === signalR.HubConnectionState.Connected;
+  }
 
   async startConnection(): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      return;
+    }
+
     // Build connection
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl('http://localhost:5000/gamehub', {
+      .withUrl('http://192.168.0.18:5000/gamehub', {
         skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets | 
-                   signalR.HttpTransportType.ServerSentEvents
+        transport: signalR.HttpTransportType.WebSockets |
+          signalR.HttpTransportType.ServerSentEvents
       })
       .withAutomaticReconnect()
       .build();
@@ -140,27 +148,27 @@ export class SignalrService {
   }
 
   async startGame(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('StartRound', roomCode);  // Changed from StartGame
+    await this.hubConnection.invoke('StartRound', roomCode.toUpperCase());
   }
 
   async sendDrawing(roomCode: string, data: DrawingData): Promise<void> {
-    await this.hubConnection.invoke('SendDrawing', roomCode, data);
+    await this.hubConnection.invoke('SendDrawing', roomCode.toUpperCase(), data);
   }
 
   async sendMessage(roomCode: string, message: string): Promise<void> {
-    await this.hubConnection.invoke('SendMessage', roomCode, message);
+    await this.hubConnection.invoke('SendMessage', roomCode.toUpperCase(), message);
   }
 
   async endRound(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('EndRound', roomCode);
+    await this.hubConnection.invoke('EndRound', roomCode.toUpperCase());
   }
 
   async nextRound(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('NextRound', roomCode);
+    await this.hubConnection.invoke('NextRound', roomCode.toUpperCase());
   }
 
   async clearCanvas(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('ClearCanvas', roomCode);
+    await this.hubConnection.invoke('ClearCanvas', roomCode.toUpperCase());
   }
 
   async leaveRoom(roomCode: string): Promise<void> {
@@ -168,7 +176,7 @@ export class SignalrService {
   }
 
   async startNextRound(roomCode: string): Promise<void> {
-    await this.hubConnection.invoke('NextRound', roomCode);
+    await this.hubConnection.invoke('NextRound', roomCode.toUpperCase());
   }
 
   async disconnect(): Promise<void> {

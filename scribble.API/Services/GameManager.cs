@@ -25,7 +25,7 @@ namespace scribble.API.Services
 
         public GameRoom? GetRoom(string roomCode)
         {
-            _rooms.TryGetValue(roomCode, out var room);
+            _rooms.TryGetValue(roomCode.ToUpper(), out var room);
             return room;
         }
 
@@ -39,8 +39,26 @@ namespace scribble.API.Services
             var room = GetRoom(roomCode);
             if (room == null) return null;
 
+            // Check if player already exists by username (re-connection case)
+            var player = room.Players.FirstOrDefault(p => p.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+
+            if (player != null)
+            {
+                // Update connection ID for the existing player
+                player.ConnectionId = connectionId;
+
+                // CRITICAL: If this player was the drawer, update the Room's CurrentDrawerId
+                // because the HUB uses room.CurrentDrawerId to check permissions!
+                if (player.IsDrawing)
+                {
+                    room.CurrentDrawerId = connectionId;
+                }
+
+                return player;
+            }
+
             // Create new player
-            var player = new Player
+            player = new Player
             {
                 ConnectionId = connectionId,
                 Username = username,
@@ -79,28 +97,49 @@ namespace scribble.API.Services
         public void StartNewRound(string roomCode)
         {
             var room = GetRoom(roomCode);
-            if (room == null) return;
+            if (room == null || room.Players.Count == 0) return;
 
+            // 1. Reset all players
             foreach (var player in room.Players)
             {
                 player.HasGuessedCorrectly = false;
                 player.IsDrawing = false;
             }
 
+            // 2. Determine index of current drawer (if any)
             var currentDrawerIndex = room.Players.FindIndex(p => p.ConnectionId == room.CurrentDrawerId);
-            var nextDrawerIndex = (currentDrawerIndex + 1) % room.Players.Count;
-            var nextDrawer = room.Players[nextDrawerIndex];
 
+            // 3. Select next drawer safely
+            int nextDrawerIndex;
+            if (currentDrawerIndex == -1)
+            {
+                // No current drawer or drawer left: start with first player
+                nextDrawerIndex = 0;
+            }
+            else
+            {
+                // Rotate to next player
+                nextDrawerIndex = (currentDrawerIndex + 1) % room.Players.Count;
+            }
+
+            var nextDrawer = room.Players[nextDrawerIndex];
             room.CurrentDrawerId = nextDrawer.ConnectionId;
             nextDrawer.IsDrawing = true;
 
-            room.CurrentWord = room.WordPool[_random.Next(room.WordPool.Count)];
+            // 4. Select a new secret word
+            if (room.WordPool != null && room.WordPool.Count > 0)
+            {
+                room.CurrentWord = room.WordPool[_random.Next(room.WordPool.Count)];
+            }
+            else
+            {
+                room.CurrentWord = "apples"; // Fallback
+            }
 
-            // Update round info
+            // 5. Update round info
             room.RoundStartTime = DateTime.UtcNow;
             room.RoundNumber++;
             room.State = GameState.Drawing;
-
         }
 
         public bool CheckGuess(string roomCode, string connectionId, string guess)

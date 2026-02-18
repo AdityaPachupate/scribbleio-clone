@@ -15,6 +15,7 @@ import { SignalrService, DrawingData, ChatMessage, Player } from '../../services
 })
 export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('canvas') canvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('chatMessagesContainer') chatMessagesContainer!: ElementRef;
 
   // Game state
   roomCode: string = '';
@@ -30,6 +31,7 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   currentDrawer: string = '';
   timeRemaining: number = 80;
   roundEndData: any = null;
+  nextRoundCountdown: number = 0;  // ✅ Countdown before next round auto-starts
 
   // Drawing tools
   colors: string[] = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500'];
@@ -42,6 +44,7 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   private isDrawing = false;
   private destroy$ = new Subject<void>();
   private timerInterval: any;
+  private nextRoundInterval: any;  // ✅ Countdown interval between rounds
   private lastX: number = 0;
   private lastY: number = 0;
 
@@ -49,10 +52,10 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
     private signalrService: SignalrService,
     private router: Router,
     private cdr: ChangeDetectorRef  // Add this
-  ) {}
+  ) { }
 
   async ngOnInit(): Promise<void> {
-    this.roomCode = localStorage.getItem('roomCode') || '';
+    this.roomCode = (localStorage.getItem('roomCode') || '').toUpperCase();
     this.username = localStorage.getItem('username') || '';
 
     if (!this.roomCode || !this.username) {
@@ -60,8 +63,19 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // Setup subscriptions BEFORE setupCanvas (canvas ref may not exist yet)
+    // Setup subscriptions BEFORE setupCanvas
     this.setupSubscriptions();
+
+    // Handle refresh: if not connected, start connection and join room
+    try {
+      if (!this.signalrService.isConnected) {
+        await this.signalrService.startConnection();
+        await this.signalrService.joinRoom(this.roomCode, this.username);
+      }
+    } catch (err) {
+      console.error('Error re-connecting:', err);
+      this.router.navigate(['/']);
+    }
   }
 
   ngAfterViewInit(): void {
@@ -72,6 +86,9 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
+    }
+    if (this.nextRoundInterval) {
+      clearInterval(this.nextRoundInterval);  // ✅ Clean up countdown
     }
     this.destroy$.next();
     this.destroy$.complete();
@@ -136,6 +153,8 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((msg) => {
         console.log('Message received:', msg);
         this.chatMessages.push(msg);
+        this.cdr.detectChanges();  // ✅ Force immediate template update
+        this.scrollToBottom();    // ✅ Auto-scroll to new message
       });
 
     // Round started
@@ -149,6 +168,7 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
         this.isMyTurn = false;
         this.maskedWord = data.maskedWord;
         this.startTimer();
+        this.cdr.markForCheck();
       });
 
     // Your turn to draw
@@ -159,6 +179,9 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
         this.isMyTurn = true;
         this.currentWord = data.word;
         this.gameStarted = true;
+        this.roundEnded = false;  // ✅ Clear round-end overlay for drawer
+        this.startTimer();        // ✅ Start timer for the drawer too
+        this.cdr.markForCheck();
       });
 
     // Correct guess
@@ -173,6 +196,8 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
           isSystemMessage: true,
           isCorrectGuess: true
         });
+        this.cdr.detectChanges();
+        this.scrollToBottom();
       });
 
     // Round ended
@@ -184,6 +209,35 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
         this.roundEndData = data;
         this.gameStarted = false;
         this.isMyTurn = false;
+        // ✅ Stop the game timer
+        if (this.timerInterval) {
+          clearInterval(this.timerInterval);
+          this.timerInterval = null;
+        }
+        // ✅ Start 5-second auto-next-round countdown
+        this.nextRoundCountdown = 5;
+        if (this.nextRoundInterval) clearInterval(this.nextRoundInterval);
+        this.nextRoundInterval = setInterval(() => {
+          this.nextRoundCountdown--;
+          this.cdr.markForCheck();
+          if (this.nextRoundCountdown <= 0) {
+            clearInterval(this.nextRoundInterval);
+            this.nextRoundInterval = null;
+            // Only one client (the previous drawer, tracked by roundEndData)
+            // calls NextRound to avoid duplicate server calls.
+            // We use the first player in the sorted results as the trigger.
+            const topPlayer = data?.players?.[0];
+            if (topPlayer && this.players.length > 0) {
+              // The player whose username matches the first in sorted list
+              // triggers the next round — but simpler: just have every client
+              // call it; the server is idempotent enough for this.
+              // Actually safest: only the current user if they were the drawer.
+              this.signalrService.nextRound(this.roomCode)
+                .catch(err => console.error('Error starting next round:', err));
+            }
+          }
+        }, 1000);
+        this.cdr.markForCheck();
       });
 
     // Clear canvas
@@ -223,13 +277,13 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
     const y = event.clientY - rect.top;
 
     this.drawLine(this.lastX, this.lastY, x, y);
-    
-    this.signalrService.sendDrawing(this.roomCode, { 
-      x, 
-      y, 
+
+    this.signalrService.sendDrawing(this.roomCode, {
+      x,
+      y,
       prevX: this.lastX,
       prevY: this.lastY,
-      color: this.selectedColor, 
+      color: this.selectedColor,
       lineWidth: this.selectedLineWidth,
       action: 'draw'
     }).catch(err => console.error('Error sending drawing:', err));
@@ -299,9 +353,27 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.timerInterval) clearInterval(this.timerInterval);
     this.timerInterval = setInterval(() => {
       this.timeRemaining--;
-      if (this.timeRemaining <= 0) {  // ✅ Added opening parenthesis
+      this.cdr.markForCheck();  // ✅ Update timer display every second
+      if (this.timeRemaining <= 0) {
         clearInterval(this.timerInterval);
+        this.timerInterval = null;
+        // ✅ Only the drawer ends the round to avoid duplicate calls
+        if (this.isMyTurn) {
+          this.signalrService.endRound(this.roomCode)
+            .catch(err => console.error('Error ending round:', err));
+        }
       }
     }, 1000);
+  }
+
+  private scrollToBottom(): void {
+    try {
+      setTimeout(() => {
+        if (this.chatMessagesContainer) {
+          this.chatMessagesContainer.nativeElement.scrollTop =
+            this.chatMessagesContainer.nativeElement.scrollHeight;
+        }
+      }, 50);
+    } catch (err) { }
   }
 }

@@ -55,23 +55,25 @@ public class GameHub : Hub
             return;
         }
 
-        if (room.Players.Any(p => p.Username.Equals(username, StringComparison.OrdinalIgnoreCase)))
-        {
-            await Clients.Caller.SendAsync("Error", "Username already exists in this room");
-            return;
-        }
+        // Allow re-joining with same username (re-connection case)
+        // If we want to prevent TWO players with same name, we'd check if the other connection is active
+        // but for this project, updating is fine.
 
         var player = _gameManager.AddPlayer(roomCode, Context.ConnectionId, username);
 
         if (player != null)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
+            await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
 
-            await Clients.Group(roomCode).SendAsync("PlayerJoined", new
+            // Sync the Joining player with current state
+            await Clients.Caller.SendAsync("PlayerJoined", new
             {
                 players = room.Players,
                 newPlayer = player
             });
+
+            // Broadcast to everyone else (and the caller) that players list changed
+            await Clients.Group(room.RoomCode).SendAsync("PlayersUpdated", room.Players);
 
             var systemMessage = new ChatMessage
             {
@@ -82,9 +84,9 @@ public class GameHub : Hub
             room.ChatHistory.Add(systemMessage);
 
             // Broadcast system message
-            await Clients.Group(roomCode).SendAsync("ReceiveMessage", systemMessage);
+            await Clients.Group(room.RoomCode).SendAsync("ReceiveMessage", systemMessage);
 
-            _logger.LogInformation($"{username} joined room {roomCode}");
+            _logger.LogInformation($"{username} joined room {room.RoomCode}");
         }
     }
 
@@ -260,48 +262,48 @@ public class GameHub : Hub
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        // Find which room the player was in
+        foreach (var room in _gameManager.GetAllRooms())
         {
-            // Find which room the player was in
-            foreach (var room in _gameManager.GetAllRooms())
+            var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+
+            if (player != null)
             {
-                var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
-                
-                if (player != null)
+                var wasDrawing = player.IsDrawing;
+
+                // Remove player
+                _gameManager.RemovePlayer(room.RoomCode, Context.ConnectionId);
+
+                // Notify others
+                var systemMessage = new ChatMessage
                 {
-                    var wasDrawing = player.IsDrawing;
-                    
-                    // Remove player
-                    _gameManager.RemovePlayer(room.RoomCode, Context.ConnectionId);
+                    Username = "System",
+                    Message = $"{player.Username} left the game",
+                    IsSystemMessage = true
+                };
 
-                    // Notify others
-                    var systemMessage = new ChatMessage
-                    {
-                        Username = "System",
-                        Message = $"{player.Username} left the game",
-                        IsSystemMessage = true
-                    };
+                await Clients.Group(room.RoomCode).SendAsync("PlayerLeft", new
+                {
+                    players = room.Players,
+                    leftPlayer = player
+                });
 
-                    await Clients.Group(room.RoomCode).SendAsync("PlayerLeft", new
-                    {
-                        players = room.Players,
-                        leftPlayer = player
-                    });
+                await Clients.Group(room.RoomCode).SendAsync("ReceiveMessage", systemMessage);
 
-                    await Clients.Group(room.RoomCode).SendAsync("ReceiveMessage", systemMessage);
-
-                    // If drawer left, end the round
-                    if (wasDrawing && room.Players.Count > 0)
-                    {
-                        await EndRound(room.RoomCode);
-                    }
-
-                    _logger.LogInformation($"{player.Username} disconnected from room {room.RoomCode}");
-                    break;
+                // If drawer left, end the round
+                if (wasDrawing && room.Players.Count > 0)
+                {
+                    await EndRound(room.RoomCode);
                 }
-            }
 
-            await base.OnDisconnectedAsync(exception);
+                _logger.LogInformation($"{player.Username} disconnected from room {room.RoomCode}");
+                break;
+            }
         }
+
+        await base.OnDisconnectedAsync(exception);
+    }
 
 }
 
