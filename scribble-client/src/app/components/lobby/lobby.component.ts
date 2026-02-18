@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 @Component({
   selector: 'app-lobby',
   standalone: true,
-  imports: [CommonModule,FormsModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './lobby.component.html',
   styleUrl: './lobby.component.css',
 })
@@ -24,19 +24,21 @@ export class LobbyComponent implements OnInit {
   constructor(
     private signalrService: SignalrService,
     private router: Router,
-  ) {}
+  ) { }
 
   async ngOnInit(): Promise<void> {
     this.setupSubscriptions();
 
     this.isConnecting = true;
     try {
-      this.signalrService.startConnection();
+      await this.signalrService.startConnection(); // ✅ Await the connection
       this.isConnecting = false;
+      console.log('Successfully connected to SignalR');
     } catch (error) {
       this.isConnecting = false;
       this.errorMessage =
-        'Failed to connect to server. Please refresh the page.';
+        'Failed to connect to game server. Please ensure the backend is running and reachable.';
+      console.error('Lobby connection error:', error);
     }
   }
 

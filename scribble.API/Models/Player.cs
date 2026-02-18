@@ -17,6 +17,9 @@
         // Has this player guessed correctly this round?
         public bool HasGuessedCorrectly { get; set; }
 
+        // Is this player the room host?
+        public bool IsHost { get; set; }
+
         // When did the player join?
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     }

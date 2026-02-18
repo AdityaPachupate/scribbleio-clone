@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -30,6 +30,7 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   maskedWord: string = '';
   currentDrawer: string = '';
   timeRemaining: number = 80;
+  roundNumber: number = 0;
   roundEndData: any = null;
   nextRoundCountdown: number = 0;  // ✅ Countdown before next round auto-starts
 
@@ -51,7 +52,8 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(
     private signalrService: SignalrService,
     private router: Router,
-    private cdr: ChangeDetectorRef  // Add this
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone  // ✅ Inject NgZone
   ) { }
 
   async ngOnInit(): Promise<void> {
@@ -63,18 +65,24 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    if (!this.roomCode || !this.username) {
+      this.router.navigate(['/']);
+      return;
+    }
+
     // Setup subscriptions BEFORE setupCanvas
     this.setupSubscriptions();
 
-    // Handle refresh: if not connected, start connection and join room
+    // Always call joinRoom (it's idempotent) to ensure the player is in the group 
+    // and receives the initial state (players, chat history).
     try {
       if (!this.signalrService.isConnected) {
         await this.signalrService.startConnection();
-        await this.signalrService.joinRoom(this.roomCode, this.username);
       }
+      await this.signalrService.joinRoom(this.roomCode, this.username);
     } catch (err) {
-      console.error('Error re-connecting:', err);
-      this.router.navigate(['/']);
+      console.error('Error connecting/syncing:', err);
+      // Optional: Show error to user or navigate back
     }
   }
 
@@ -109,152 +117,190 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private setupSubscriptions(): void {
-    // Player joined
+    // Player joined (handles sync on rejoin/refresh)
     this.signalrService.playerJoined$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Player joined:', data);
-        this.players = data.players || [];
-        this.cdr.markForCheck();  // ✅ Force update
+        this.ngZone.run(() => {
+          console.log('Player joined/synced:', data);
+          this.players = data.players || [];
+
+          // ✅ Sync full game state (mid-game join/refresh)
+          this.gameStarted = data.gameStarted || false;
+          this.roundEnded = data.roundEnded || false;
+          this.currentDrawer = data.currentDrawer || '';
+          this.maskedWord = data.maskedWord || '';
+          this.roundNumber = data.roundNumber || 1;
+
+          // ✅ Sync chat history if provided
+          if (data.chatHistory) {
+            this.chatMessages = data.chatHistory.map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }));
+            this.scrollToBottom();
+          }
+          this.cdr.detectChanges();
+        });
       });
 
     // Players updated
     this.signalrService.playersUpdated$
       .pipe(takeUntil(this.destroy$))
       .subscribe((players) => {
-        console.log('Players updated:', players);
-        this.players = players;
-        this.cdr.markForCheck();  // ✅ Force update
+        this.ngZone.run(() => {
+          console.log('Players updated:', players);
+          this.players = players;
+          this.cdr.detectChanges();
+        });
       });
 
     // Player left
     this.signalrService.playerLeft$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Player left:', data);
-        this.players = data.players || [];
-        this.cdr.markForCheck();  // ✅ Force update
+        this.ngZone.run(() => {
+          console.log('Player left:', data);
+          this.players = data.players || [];
+          this.cdr.detectChanges();
+        });
       });
 
     // Receive drawing
     this.signalrService.receiveDrawing$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        if (this.ctx) {
-          this.ctx.strokeStyle = data.color;
-          this.ctx.lineWidth = data.lineWidth;
-          this.drawLine(data.prevX, data.prevY, data.x, data.y);
-        }
+        this.ngZone.run(() => {
+          if (this.ctx) {
+            this.ctx.strokeStyle = data.color;
+            this.ctx.lineWidth = data.lineWidth;
+            this.drawLine(data.prevX, data.prevY, data.x, data.y);
+          }
+        });
       });
 
     // Receive message
     this.signalrService.receiveMessage$
       .pipe(takeUntil(this.destroy$))
       .subscribe((msg) => {
-        console.log('Message received:', msg);
-        this.chatMessages.push(msg);
-        this.cdr.detectChanges();  // ✅ Force immediate template update
-        this.scrollToBottom();    // ✅ Auto-scroll to new message
+        this.ngZone.run(() => {
+          console.log('Message received:', msg);
+          this.chatMessages.push(msg);
+          this.cdr.detectChanges();
+          this.scrollToBottom();
+        });
       });
 
     // Round started
     this.signalrService.roundStarted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Round started:', data);
-        this.gameStarted = true;
-        this.roundEnded = false;
-        this.currentDrawer = data.drawer;
-        this.isMyTurn = false;
-        this.maskedWord = data.maskedWord;
-        this.startTimer();
-        this.cdr.markForCheck();
+        this.ngZone.run(() => {
+          console.log('Round started:', data);
+          this.gameStarted = true;
+          this.roundEnded = false;
+          this.currentDrawer = data.drawer;
+          this.isMyTurn = false;
+          this.maskedWord = data.maskedWord;
+          this.roundNumber = data.roundNumber || this.roundNumber + 1;
+          this.startTimer();
+          this.cdr.detectChanges();
+        });
       });
 
     // Your turn to draw
     this.signalrService.yourTurnToDraw$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Your turn to draw:', data);
-        this.isMyTurn = true;
-        this.currentWord = data.word;
-        this.gameStarted = true;
-        this.roundEnded = false;  // ✅ Clear round-end overlay for drawer
-        this.startTimer();        // ✅ Start timer for the drawer too
-        this.cdr.markForCheck();
+        this.ngZone.run(() => {
+          console.log('Your turn to draw:', data);
+          this.isMyTurn = true;
+          this.currentWord = data.word;
+          this.gameStarted = true;
+          this.roundEnded = false;
+          this.roundNumber = data.roundNumber || this.roundNumber + 1;
+          this.startTimer();
+          this.cdr.detectChanges();
+        });
       });
 
     // Correct guess
     this.signalrService.correctGuess$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Correct guess:', data);
-        this.chatMessages.push({
-          username: 'System',
-          message: `${data.username} guessed correctly!`,
-          timestamp: new Date(),
-          isSystemMessage: true,
-          isCorrectGuess: true
+        this.ngZone.run(() => {
+          console.log('Correct guess:', data);
+          const player = this.players.find(p => p.username === data.username);
+          if (player) {
+            player.score = data.score;
+            player.hasGuessedCorrectly = true;
+          }
+          this.cdr.detectChanges();
+          this.scrollToBottom();
         });
-        this.cdr.detectChanges();
-        this.scrollToBottom();
       });
 
     // Round ended
     this.signalrService.roundEnded$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        console.log('Round ended:', data);
-        this.roundEnded = true;
-        this.roundEndData = data;
-        this.gameStarted = false;
-        this.isMyTurn = false;
-        // ✅ Stop the game timer
-        if (this.timerInterval) {
-          clearInterval(this.timerInterval);
-          this.timerInterval = null;
-        }
-        // ✅ Start 5-second auto-next-round countdown
-        this.nextRoundCountdown = 5;
-        if (this.nextRoundInterval) clearInterval(this.nextRoundInterval);
-        this.nextRoundInterval = setInterval(() => {
-          this.nextRoundCountdown--;
-          this.cdr.markForCheck();
-          if (this.nextRoundCountdown <= 0) {
-            clearInterval(this.nextRoundInterval);
-            this.nextRoundInterval = null;
-            // Only one client (the previous drawer, tracked by roundEndData)
-            // calls NextRound to avoid duplicate server calls.
-            // We use the first player in the sorted results as the trigger.
-            const topPlayer = data?.players?.[0];
-            if (topPlayer && this.players.length > 0) {
-              // The player whose username matches the first in sorted list
-              // triggers the next round — but simpler: just have every client
-              // call it; the server is idempotent enough for this.
-              // Actually safest: only the current user if they were the drawer.
-              this.signalrService.nextRound(this.roomCode)
-                .catch(err => console.error('Error starting next round:', err));
-            }
+        this.ngZone.run(() => {
+          console.log('Round ended:', data);
+          this.roundEnded = true;
+          this.roundEndData = data;
+          this.gameStarted = false;
+          this.isMyTurn = false;
+          if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
           }
-        }, 1000);
-        this.cdr.markForCheck();
+          this.nextRoundCountdown = 5;
+          if (this.nextRoundInterval) clearInterval(this.nextRoundInterval);
+          this.nextRoundInterval = setInterval(() => {
+            this.ngZone.run(() => {
+              this.nextRoundCountdown--;
+              this.cdr.detectChanges();
+              if (this.nextRoundCountdown <= 0) {
+                clearInterval(this.nextRoundInterval);
+                this.nextRoundInterval = null;
+                this.signalrService.nextRound(this.roomCode)
+                  .catch(err => console.error('Error starting next round:', err));
+              }
+            });
+          }, 1000);
+          this.cdr.detectChanges();
+        });
       });
 
     // Clear canvas
     this.signalrService.clearCanvas$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        if (this.ctx) {
-          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
+        this.ngZone.run(() => {
+          if (this.ctx) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          }
+        });
       });
 
     // Error
     this.signalrService.error$
       .pipe(takeUntil(this.destroy$))
       .subscribe((error) => {
-        console.error('SignalR error:', error);
+        this.ngZone.run(() => {
+          console.error('SignalR error:', error);
+        });
       });
+  }
+
+  get isHost(): boolean {
+    const me = this.players.find(p => p.username === this.username);
+    return me?.isHost || false;
+  }
+
+  get hostName(): string {
+    const host = this.players.find(p => p.isHost);
+    return host?.username || 'Unknown';
   }
 
   async startGame(): Promise<void> {

@@ -33,7 +33,7 @@ public class GameHub : Hub
         if (player != null)
         {
             //-> get player , check if not null
-            await Groups.AddToGroupAsync(Context.ConnectionId, username);
+            await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
             //-> then add to group with current connection id and the room room code
             await Clients.Caller.SendAsync("RoomCreated", new
             {
@@ -69,7 +69,14 @@ public class GameHub : Hub
             await Clients.Caller.SendAsync("PlayerJoined", new
             {
                 players = room.Players,
-                newPlayer = player
+                newPlayer = player,
+                chatHistory = room.ChatHistory,
+                // ✅ Add full game state for mid-game join/refresh
+                gameStarted = room.State != GameState.Waiting,
+                currentDrawer = room.Players.FirstOrDefault(p => p.ConnectionId == room.CurrentDrawerId)?.Username,
+                maskedWord = _gameManager.GetMaskedWord(room.RoomCode),
+                roundEnded = room.State == GameState.RoundEnd,
+                roundNumber = room.RoundNumber
             });
 
             // Broadcast to everyone else (and the caller) that players list changed

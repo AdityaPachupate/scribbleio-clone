@@ -63,7 +63,8 @@ namespace scribble.API.Services
                 ConnectionId = connectionId,
                 Username = username,
                 Score = 0,
-                IsDrawing = false
+                IsDrawing = false,
+                IsHost = room.Players.Count == 0 // First player is host
             };
 
             // Add to room's player list
@@ -84,6 +85,12 @@ namespace scribble.API.Services
 
             // Remove from list
             room.Players.Remove(player);
+
+            // If the leaving player was host, assign next host
+            if (player.IsHost && room.Players.Count > 0)
+            {
+                room.Players[0].IsHost = true;
+            }
 
             // If room is empty, delete it
             if (room.Players.Count == 0)

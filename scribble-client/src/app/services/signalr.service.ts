@@ -27,6 +27,7 @@ export interface Player {
   score: number;
   isDrawing: boolean;
   hasGuessedCorrectly: boolean;
+  isHost: boolean;
 }
 
 @Injectable({
@@ -62,9 +63,14 @@ export class SignalrService {
       return;
     }
 
+    // Use current hostname (works for both localhost and IP access)
+    const hostname = window.location.hostname;
+    const hubUrl = `http://${hostname}:5000/gamehub`;
+    console.log(`Connecting to SignalR at: ${hubUrl}`);
+
     // Build connection
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl('http://192.168.0.18:5000/gamehub', {
+      .withUrl(hubUrl, {
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets |
           signalR.HttpTransportType.ServerSentEvents
