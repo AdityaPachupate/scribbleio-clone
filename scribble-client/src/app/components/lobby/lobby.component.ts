@@ -1,11 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { SignalrService } from '../../services/signalr.service';
 import { Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-lobby',
   standalone: true,
-  imports: [],
+  imports: [CommonModule,FormsModule],
   templateUrl: './lobby.component.html',
   styleUrl: './lobby.component.css',
 })
@@ -39,20 +41,29 @@ export class LobbyComponent implements OnInit {
   }
 
   private setupSubscriptions(): void {
-
-
+    // After room is created
     this.signalrService.roomCreated$.subscribe((data) => {
+      console.log('Room created:', data);
       localStorage.setItem('roomCode', data.roomCode);
       localStorage.setItem('username', this.username);
-    });
-
-    this.signalrService.playerJoined$.subscribe((data) => {
-      localStorage.setItem('roomCode', this.roomCode);
-      localStorage.setItem('username', this.username);
+      this.isCreating = false;
+      // Navigate to game
       this.router.navigate(['/game']);
     });
 
+    // After player joins
+    this.signalrService.playerJoined$.subscribe((data) => {
+      console.log('Player joined:', data);
+      localStorage.setItem('roomCode', this.roomCode);
+      localStorage.setItem('username', this.username);
+      this.isJoining = false;
+      // Navigate to game
+      this.router.navigate(['/game']);
+    });
+
+    // Handle errors
     this.signalrService.error$.subscribe((error) => {
+      console.error('SignalR error:', error);
       this.errorMessage = error;
       this.isCreating = false;
       this.isJoining = false;
@@ -60,7 +71,6 @@ export class LobbyComponent implements OnInit {
   }
 
   async createRoom(): Promise<void> {
-    // Validation
     if (!this.username.trim()) {
       this.errorMessage = 'Please enter a username';
       return;
@@ -70,8 +80,9 @@ export class LobbyComponent implements OnInit {
     this.isCreating = true;
 
     try {
-      // Call SignalR method
       await this.signalrService.createRoom(this.username);
+      // Navigate after successful invoke
+      // (subscription will handle the final navigation)
     } catch (error) {
       this.errorMessage = 'Failed to create room';
       this.isCreating = false;
@@ -82,7 +93,6 @@ export class LobbyComponent implements OnInit {
    * Join existing room
    */
   async joinRoom(): Promise<void> {
-    // Validation
     if (!this.username.trim()) {
       this.errorMessage = 'Please enter a username';
       return;
@@ -98,6 +108,7 @@ export class LobbyComponent implements OnInit {
 
     try {
       await this.signalrService.joinRoom(this.roomCode.toUpperCase(), this.username);
+      // Navigation will happen via playerJoined$ subscription
     } catch (error) {
       this.errorMessage = 'Failed to join room';
       this.isJoining = false;

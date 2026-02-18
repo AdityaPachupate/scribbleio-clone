@@ -56,19 +56,18 @@ export class SignalrService {
   async startConnection(): Promise<void> {
     // Build connection
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl('https://localhost:5001/gamehub', {
+      .withUrl('http://localhost:5000/gamehub', {
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | 
                    signalR.HttpTransportType.ServerSentEvents
       })
-      .withAutomaticReconnect()  // Auto-reconnect on disconnect
+      .withAutomaticReconnect()
       .build();
 
     // Set up event listeners
     this.setupEventListeners();
 
     try {
-      // Actually connect
       await this.hubConnection.start();
       console.log('SignalR Connected');
     } catch (err) {

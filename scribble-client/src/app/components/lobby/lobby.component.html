@@ -1,1 +1,79 @@
-<p>lobby works!</p>
+<div class="lobby-container">
+  <div class="lobby-card">
+    <h1 class="game-title">🎨 Scribble Game</h1>
+    <p class="subtitle">Draw, Guess, and Have Fun!</p>
+
+    <!-- Loading spinner -->
+    <div class="connection-status" *ngIf="isConnecting">
+      <div class="spinner"></div>
+      <p>Connecting to server...</p>
+    </div>
+
+    <!-- Main form -->
+    <div class="form-container" *ngIf="!isConnecting">
+      <!-- Username input -->
+      <div class="input-group">
+        <label for="username">Username</label>
+        <input
+          id="username"
+          type="text"
+          [(ngModel)]="username"
+          placeholder="Enter your name"
+          maxlength="20"
+          (keyup.enter)="createRoom()"
+        />
+      </div>
+
+      <!-- Room code input -->
+      <div class="input-group">
+        <label for="roomCode">Room Code (to join)</label>
+        <input
+          id="roomCode"
+          type="text"
+          [(ngModel)]="roomCode"
+          placeholder="Enter room code"
+          maxlength="6"
+          (keyup.enter)="joinRoom()"
+          style="text-transform: uppercase;"
+        />
+      </div>
+
+      <!-- Error message -->
+      <div class="error-message" *ngIf="errorMessage">
+        {{ errorMessage }}
+      </div>
+
+      <!-- Action buttons -->
+      <div class="button-group">
+        <button
+          class="btn btn-primary"
+          (click)="createRoom()"
+          [disabled]="isCreating || isJoining"
+        >
+          <span *ngIf="!isCreating">Create New Room</span>
+          <span *ngIf="isCreating">Creating...</span>
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          (click)="joinRoom()"
+          [disabled]="isCreating || isJoining"
+        >
+          <span *ngIf="!isJoining">Join Room</span>
+          <span *ngIf="isJoining">Joining...</span>
+        </button>
+      </div>
+
+      <!-- Instructions -->
+      <div class="instructions">
+        <h3>How to Play:</h3>
+        <ol>
+          <li>Create a room or join with a room code</li>
+          <li>Wait for other players to join</li>
+          <li>Take turns drawing while others guess</li>
+          <li>Earn points for correct guesses!</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>

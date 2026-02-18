@@ -34,8 +34,8 @@ public class GameHub : Hub
         {
             //-> get player , check if not null
             await Groups.AddToGroupAsync(Context.ConnectionId, username);
-            //-> then add to ggroup with current connection id and the room room code
-            await Clients.Caller.SendAsync("RoomCreate", new
+            //-> then add to group with current connection id and the room room code
+            await Clients.Caller.SendAsync("RoomCreated", new
             {
                 roomCode = room.RoomCode,
                 players = room.Players
