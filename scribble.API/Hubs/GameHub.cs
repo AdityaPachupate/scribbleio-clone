@@ -216,6 +216,93 @@ public class GameHub : Hub
         _logger.LogInformation($"Round ended in room {roomCode}");
     }
 
+    public async Task NextRound(string roomCode)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        // Clear everyone's canvas
+        await Clients.Group(roomCode).SendAsync("ClearCanvas");
+
+        // Start new round
+        _gameManager.StartNewRound(roomCode);
+
+        var drawer = room.Players.First(p => p.IsDrawing);
+
+        // Notify drawer
+        await Clients.Client(drawer.ConnectionId).SendAsync("YourTurnToDraw", new
+        {
+            word = room.CurrentWord,
+            roundDuration = room.RoundDurationSeconds
+        });
+
+        // Notify guessers
+        var maskedWord = _gameManager.GetMaskedWord(roomCode);
+        await Clients.GroupExcept(roomCode, drawer.ConnectionId).SendAsync("RoundStarted", new
+        {
+            drawer = drawer.Username,
+            wordLength = room.CurrentWord.Length,
+            maskedWord = maskedWord,
+            roundDuration = room.RoundDurationSeconds
+        });
+    }
+
+    public async Task ClearCanvas(string roomCode)
+    {
+        var room = _gameManager.GetRoom(roomCode);
+        if (room == null) return;
+
+        // Verify sender is drawer
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player == null || !player.IsDrawing) return;
+
+        await Clients.Group(roomCode).SendAsync("ClearCanvas");
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+        {
+            // Find which room the player was in
+            foreach (var room in _gameManager.GetAllRooms())
+            {
+                var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+                
+                if (player != null)
+                {
+                    var wasDrawing = player.IsDrawing;
+                    
+                    // Remove player
+                    _gameManager.RemovePlayer(room.RoomCode, Context.ConnectionId);
+
+                    // Notify others
+                    var systemMessage = new ChatMessage
+                    {
+                        Username = "System",
+                        Message = $"{player.Username} left the game",
+                        IsSystemMessage = true
+                    };
+
+                    await Clients.Group(room.RoomCode).SendAsync("PlayerLeft", new
+                    {
+                        players = room.Players,
+                        leftPlayer = player
+                    });
+
+                    await Clients.Group(room.RoomCode).SendAsync("ReceiveMessage", systemMessage);
+
+                    // If drawer left, end the round
+                    if (wasDrawing && room.Players.Count > 0)
+                    {
+                        await EndRound(room.RoomCode);
+                    }
+
+                    _logger.LogInformation($"{player.Username} disconnected from room {room.RoomCode}");
+                    break;
+                }
+            }
+
+            await base.OnDisconnectedAsync(exception);
+        }
+
 }
 
 
