@@ -23,3 +23,5 @@ Notes for contributors and automation
 - Update references and commands when project structure changes.
 
 `[2026-02-18] [dev] - Add GameRoom model - Implemented GameRoom, GameState enum, and ChatMessage; added word pool, chat history, round timing and CreatedAt - scribble.API/Models/GameRoom.cs`
+
+`[2026-02-18] [dev] - Add GameHub - Implemented SignalR GameHub for room creation/joining, messaging, drawing broadcast, round lifecycle (start/end/next), clear canvas, and disconnect handling; broadcasts system messages and updates player state - scribble.API/Hubs/GameHub.cs`
