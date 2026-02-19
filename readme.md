@@ -1,7 +1,8 @@
 # 🎨 Scribbl.io Clone — Iterative Prototyping Guide
 
 > **Repo:** [AdityaPachupate/scribbleio-clone](https://github.com/AdityaPachupate/scribbleio-clone)  
-> **Stack:** .NET Core · Angular · SignalR  
+> **Stack:** .NET Core · Angular · SignalR
+> **Note:** This guide uses `GameHub.cs` — your actual file name in the repo (not `DrawingHub.cs`)  
 > **Approach:** Prototype-first. Build small, run it, then improve.
 
 ---
@@ -32,10 +33,10 @@ Angular CanvasComponent
 (captures mousedown / mousemove / mouseup)
         │
         ▼
-SignalR Client  ──── HubConnectionBuilder ────►  ws://localhost:5000/drawing-hub
+SignalR Client  ──── HubConnectionBuilder ────►  ws://localhost:5000/game-hub
         │
         ▼
-DrawingHub (.NET Core)
+GameHub (.NET Core)
         │
         ▼
 Game State Update (in-memory Dictionary)
@@ -56,7 +57,7 @@ Canvas redraws the stroke on screen
 Player types guess in ChatComponent
         │
         ▼
-SignalR → DrawingHub.SendMessage()
+SignalR → GameHub.SendMessage()
         │
         ├─ word matches? ──► award points → Broadcast CorrectGuess
         │
@@ -72,7 +73,7 @@ SignalR → DrawingHub.SendMessage()
 ```
 scribble.API/
 ├── Hubs/
-│   └── DrawingHub.cs         ← All SignalR methods live here
+│   └── GameHub.cs         ← All SignalR methods live here
 ├── Models/
 │   ├── GameState.cs          ← Per-room game data (drawer, word, round)
 │   ├── Player.cs             ← Name, connectionId, score
@@ -84,7 +85,7 @@ scribble.API/
 
 **Key backend concepts:**
 
-- **DrawingHub** — extends `Hub`, handles all real-time methods
+- **GameHub** — extends `Hub`, handles all real-time methods
 - **GameState** — plain C# object stored in a `ConcurrentDictionary<string, GameState>`
 - **Room Management** — SignalR Groups map directly to game rooms
 - **Timer** — `System.Threading.Timer` fires every second per active room
@@ -159,7 +160,7 @@ Two browser tabs open. Draw on one. The stroke appears on the other in real-time
 
 ```
 scribble.API/
-└── Hubs/DrawingHub.cs        ← NEW
+└── Hubs/GameHub.cs        ← NEW
 
 scribble-client/src/app/
 └── canvas/
@@ -182,11 +183,11 @@ Before rooms, words, or scoring — you need to prove the pipeline works. The en
 
 ### 🧩 Minimal Code Skeleton
 
-**`DrawingHub.cs`**
+**`GameHub.cs`**
 ```csharp
 using Microsoft.AspNetCore.SignalR;
 
-public class DrawingHub : Hub
+public class GameHub : Hub
 {
     // Client calls this → Hub broadcasts to everyone else
     public async Task SendStroke(object strokeData)
@@ -211,7 +212,7 @@ builder.Services.AddCors(options =>
 // ...
 
 app.UseCors();
-app.MapHub<DrawingHub>("/drawing-hub");
+app.MapHub<GameHub>("/game-hub");
 ```
 
 **`signalr.service.ts`**
@@ -222,7 +223,7 @@ import * as signalR from '@microsoft/signalr';
 @Injectable({ providedIn: 'root' })
 export class SignalrService {
   private connection = new signalR.HubConnectionBuilder()
-    .withUrl('http://localhost:5000/drawing-hub')
+    .withUrl('http://localhost:5000/game-hub')
     .withAutomaticReconnect()
     .build();
 
@@ -345,7 +346,7 @@ Players can create or join rooms using a 6-character code. Drawing is now room-s
 ### 📁 Backend Updates
 
 ```
-scribble.API/Hubs/DrawingHub.cs    ← Add JoinRoom, LeaveRoom, SendMessage
+scribble.API/Hubs/GameHub.cs    ← Add JoinRoom, LeaveRoom, SendMessage
 scribble.API/Models/Room.cs        ← NEW (RoomCode, Players list)
 ```
 
@@ -358,7 +359,7 @@ public class Room
 }
 ```
 
-**`DrawingHub.cs` additions**
+**`GameHub.cs` additions**
 ```csharp
 // Static in-memory store (OK for prototype — replace later)
 private static ConcurrentDictionary<string, Room> Rooms = new();
@@ -486,7 +487,7 @@ With global broadcast (v1), one canvas is shared by every connected client globa
 **.NET:**
 - `System.Threading.Timer` — fires a callback on an interval; use it for the per-turn countdown
 - `Clients.Client(connectionId)` — send a message to *one specific* client (drawer gets the real word, others don't)
-- `IHubContext<DrawingHub>` — inject the hub context into a service class so `GameService` can broadcast without being inside a Hub method
+- `IHubContext<GameHub>` — inject the hub context into a service class so `GameService` can broadcast without being inside a Hub method
 
 **Angular:**
 - `BehaviorSubject` — track reactive state (current drawer, time left) that multiple components need to observe
@@ -584,7 +585,7 @@ public void StartTurnTimer(string roomCode, Func<Task> onTimerEnd)
 }
 ```
 
-**DrawingHub methods to add:**
+**GameHub methods to add:**
 ```csharp
 public async Task StartGame(string roomCode)
 {
@@ -663,7 +664,7 @@ If guessed in 95 seconds (overtime edge): minimum `10 pts`.
 ### 🧩 Correct Guess Detection
 
 ```csharp
-// In DrawingHub.SendMessage — modify existing method
+// In GameHub.SendMessage — modify existing method
 public async Task SendMessage(string roomCode, string playerName, string message)
 {
     if (!GameStates.TryGetValue(roomCode, out var state) || !state.GameStarted)
@@ -775,7 +776,7 @@ Use `Interlocked` for counters, `lock` only for multi-step read-modify-write ope
 
 ### ♻️ Room Cleanup
 
-Override `OnDisconnectedAsync` in `DrawingHub`:
+Override `OnDisconnectedAsync` in `GameHub`:
 
 ```csharp
 public override async Task OnDisconnectedAsync(Exception? exception)
@@ -816,7 +817,7 @@ public override async Task OnDisconnectedAsync(Exception? exception)
 ```typescript
 // In signalr.service.ts
 private connection = new signalR.HubConnectionBuilder()
-  .withUrl('http://localhost:5000/drawing-hub')
+  .withUrl('http://localhost:5000/game-hub')
   .withAutomaticReconnect([0, 2000, 10000, 30000]) // retry after 0s, 2s, 10s, 30s
   .build();
 
@@ -910,7 +911,7 @@ You don't need this until you deploy to multiple servers. For a single-server de
 Based on the repo structure (`scribble-client` + `scribble.API`, TypeScript + C#), your scaffold is in place. Your next steps are to verify:
 
 1. `Program.cs` has SignalR and CORS correctly configured
-2. `DrawingHub.cs` exists in `scribble.API/Hubs/`
+2. `GameHub.cs` exists in `scribble.API/Hubs/` ✅ (confirmed — you already have this)
 3. `@microsoft/signalr` is in `package.json`
 4. A `SignalrService` exists and is injected into your canvas component
 
