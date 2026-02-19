@@ -1,210 +1,141 @@
 <div class="game-container">
-  <!-- Game Header -->
-  <header class="game-header">
-    <div class="header-left">
-      <h1>Scribble Clone</h1>
-      <div class="header-info">
-        <div class="info-badge">
-          <span class="label">Room:</span>
-          <span class="value">{{ roomCode }}</span>
-        </div>
-        <div class="info-badge">
-          <span class="label">You:</span>
-          <span class="value">{{ username }}</span>
-        </div>
-        <div class="info-badge">
-          <span class="label">Host:</span>
-          <span class="value">{{ hostName }}</span>
-        </div>
-        <div class="info-badge round" *ngIf="gameStarted">
-          <span class="label">Round:</span>
-          <span class="value">{{ roundNumber }}</span>
-        </div>
+  <!-- Status Bar (Inspired by Skribbl.io) -->
+  <header class="status-bar">
+    <div class="status-left">
+      <div class="timer-circle" *ngIf="gameStarted && !roundEnded">
+        <span>{{ timeRemaining }}</span>
+      </div>
+      <div class="round-info">
+        <span class="label">ROUND</span>
+        <span class="value">{{ roundNumber }} / 3</span>
       </div>
     </div>
-    <div class="header-right">
-      <button class="btn-leave-header" (click)="leaveRoom()">🚪 Leave Room</button>
+
+    <div class="status-center">
+      <!-- Game Word / Hint -->
+      <div class="word-container" *ngIf="gameStarted && !roundEnded">
+        <div *ngIf="isMyTurn" class="word-hint">
+          <span class="label">DRAW THIS:</span>
+          <span class="word">{{ currentWord }}</span>
+        </div>
+        <div *ngIf="!isMyTurn" class="word-hint">
+          <span class="word-masked">{{ maskedWord }}</span>
+        </div>
+      </div>
+      <div class="waiting-title" *ngIf="!gameStarted">
+        🎨 SKRIBBL.CLONE
+      </div>
+    </div>
+
+    <div class="status-right">
+      <div class="room-badges">
+        <div class="badge-item you">
+          <span class="label">YOU:</span>
+          <span class="value">{{ username }}</span>
+        </div>
+        <div class="badge-item">
+          <span class="label">ROOM:</span>
+          <span class="value">{{ roomCode }}</span>
+        </div>
+        <div class="badge-item">
+          <span class="label">HOST:</span>
+          <span class="value">{{ hostName }}</span>
+        </div>
+      </div>
+      <button class="btn-leave" (click)="leaveRoom()">LEAVE</button>
     </div>
   </header>
 
-  <div class="game-layout">
-    <!-- Timer -->
-    <div class="timer" *ngIf="gameStarted && !roundEnded">
-      ⏱️ {{ timeRemaining }}s
-    </div>
-
-
-    <!-- ==================== LEFT SIDEBAR: PLAYERS ==================== -->
-    <div class="players-panel">
-      <h3>Players ({{ players.length }})</h3>
+  <div class="game-main-layout">
+    <!-- LEFT SIDEBAR: PLAYERS -->
+    <aside class="players-sidebar">
+      <div class="sidebar-header">PLAYERS</div>
 
       <!-- Player List -->
       <div class="players-list">
-        <div *ngFor="let player of players" class="player-card" [class.drawing]="player.isDrawing"
-          [class.guessed]="player.hasGuessedCorrectly">
-          <div class="player-info">
+        <div *ngFor="let player of getPlayersSorted(); let i = index" class="player-card"
+          [class.is-drawing]="player.isDrawing" [class.has-guessed]="player.hasGuessedCorrectly && !player.isDrawing">
+          <div class="player-rank">{{ i + 1 }}</div>
+          <div class="player-main">
             <span class="player-name">{{ player.username }}</span>
-            <span class="player-status" *ngIf="player.isDrawing">✏️ Drawing</span>
-            <span class="player-status correct" *ngIf="player.hasGuessedCorrectly && !player.isDrawing">
-              ✓ Guessed!
-            </span>
+            <span class="player-status-tag" *ngIf="player.isDrawing">DRAWING...</span>
+            <span class="player-status-tag success"
+              *ngIf="player.hasGuessedCorrectly && !player.isDrawing">GUESSED!</span>
           </div>
-          <div class="player-score">{{ player.score }} pts</div>
+          <div class="player-points">{{ player.score }}</div>
         </div>
       </div>
+    </aside>
 
-      <!-- Start Game Button (only shown to host before game starts) -->
-      <div class="game-controls" *ngIf="!gameStarted && isHost">
-        <button class="btn-start" (click)="startGame()">
-          🎮 Start Game
-        </button>
-        <p class="hint">Need at least 2 players</p>
-      </div>
-    </div>
-
-    <!-- ==================== CENTER: CANVAS AREA ==================== -->
-    <div class="canvas-area">
-
-      <!-- Word Display -->
-      <div class="word-display" *ngIf="gameStarted && !roundEnded">
-        <!-- Show actual word if it's your turn -->
-        <div *ngIf="isMyTurn" class="your-word">
-          <strong>Your word:</strong> {{ currentWord }}
-        </div>
-
-        <!-- Show masked word if you're guessing -->
-        <div *ngIf="!isMyTurn" class="guess-word">
-          <strong>Guess:</strong> {{ maskedWord }}
-        </div>
-      </div>
-
+    <!-- CENTER: CANVAS AREA -->
+    <main class="canvas-container">
       <!-- Drawing Tools (only shown when it's your turn) -->
-      <div class="tools-panel" *ngIf="isMyTurn && !roundEnded">
+      <div class="tools-bar" *ngIf="isMyTurn && !roundEnded">
         <!-- Color Palette -->
-        <div class="tool-section">
-          <label>Color:</label>
-          <div class="color-palette">
-            <button *ngFor="let color of colors" class="color-btn" [style.background-color]="color"
-              [class.selected]="selectedColor === color" (click)="selectColor(color)"
-              [attr.aria-label]="'Select color ' + color"></button>
+        <div class="tool-group colors">
+          <div class="color-grid">
+            <button *ngFor="let color of colors" class="color-dot" [style.background-color]="color"
+              [class.active]="selectedColor === color" (click)="selectColor(color)"></button>
           </div>
         </div>
 
         <!-- Brush Size -->
-        <div class="tool-section">
-          <label>Brush Size:</label>
-          <div class="size-buttons">
-            <button *ngFor="let width of lineWidths" class="size-btn" [class.selected]="selectedLineWidth === width"
-              (click)="selectLineWidth(width)">
-              {{ width }}px
-            </button>
-          </div>
+        <div class="tool-group brushes">
+          <button *ngFor="let width of lineWidths" class="size-dot" [class.active]="selectedLineWidth === width"
+            (click)="selectLineWidth(width)" [style.width.px]="width + 8" [style.height.px]="width + 8">
+          </button>
         </div>
 
         <!-- Clear Button -->
-        <button class="btn-clear" (click)="clearCanvasClick()">
-          🗑️ Clear
-        </button>
+        <button class="btn-tool-clear" (click)="clearCanvasClick()">CLEAR</button>
       </div>
 
-      <!-- Canvas Wrapper -->
-      <div class="canvas-wrapper">
-        <!-- Drawing Canvas -->
-        <canvas #canvas width="800" height="500" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)"
-          (mouseup)="onMouseUp()" (mouseleave)="onMouseLeave()" [class.drawable]="isMyTurn"></canvas>
+      <div class="canvas-board">
+        <canvas #canvas width="1200" height="600" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)"
+          (mouseup)="onMouseUp()" (mouseleave)="onMouseLeave()" [class.can-draw]="isMyTurn"></canvas>
 
-        <!-- Waiting Overlay (before game starts) -->
-        <div class="waiting-overlay" *ngIf="!gameStarted">
-          <div class="waiting-content">
-            <h2>🎨 Waiting to Start</h2>
-            <p>Get ready to draw and guess!</p>
-            <div class="waiting-animation">
-              <div class="dot"></div>
-              <div class="dot"></div>
-              <div class="dot"></div>
+        <!-- Overlays (Waiting, Round End) -->
+        <div class="overlay" *ngIf="!gameStarted">
+          <div class="overlay-card">
+            <h2>WAITING TO START...</h2>
+            <div class="game-controls" *ngIf="isHost">
+              <button class="btn-primary" (click)="startGame()">START GAME</button>
             </div>
+            <p *ngIf="!isHost">The host will start the game soon!</p>
           </div>
         </div>
 
-        <!-- Round End Overlay (after round ends) -->
-        <div class="round-end-overlay" *ngIf="roundEnded">
-          <div class="round-end-content">
-            <h2>🎉 Round Over!</h2>
-
-            <!-- Reveal the word -->
-            <p class="reveal-word">
-              The word was: <strong>{{ roundEndData?.word }}</strong>
-            </p>
-
-            <!-- Final Scores -->
-            <div class="final-scores">
-              <h3>Scores:</h3>
-              <div class="score-list">
-                <div *ngFor="let player of roundEndData?.players; let i = index" class="score-item"
-                  [class.first-place]="i === 0" [class.second-place]="i === 1" [class.third-place]="i === 2">
-                  <span class="rank">
-                    <span *ngIf="i === 0">🥇</span>
-                    <span *ngIf="i === 1">🥈</span>
-                    <span *ngIf="i === 2">🥉</span>
-                    <span *ngIf="i > 2">{{ i + 1 }}.</span>
-                  </span>
-                  <span class="name">{{ player.username }}</span>
-                  <span class="score">{{ player.score }} pts</span>
-                </div>
+        <div class="overlay" *ngIf="roundEnded">
+          <div class="overlay-card winner-card">
+            <h2>ROUND OVER!</h2>
+            <p class="answer">The word was: <strong>{{ roundEndData?.word }}</strong></p>
+            <div class="standings">
+              <div *ngFor="let player of roundEndData?.players; let i = index" class="standing-item">
+                <span class="rank">{{ i + 1 }}</span>
+                <span class="name">{{ player.username }}</span>
+                <span class="score">{{ player.score }}</span>
               </div>
             </div>
-
-            <!-- Next Round Button -->
-            <button class="btn-next-round" (click)="nextRound()">
-              ▶️ Next Round
-            </button>
           </div>
         </div>
       </div>
-    </div>
+    </main>
 
-    <!-- ==================== RIGHT SIDEBAR: CHAT ==================== -->
-    <div class="chat-panel">
-      <h3>💬 Chat</h3>
-
-      <!-- Chat Messages -->
-      <div class="chat-messages" #chatMessagesContainer>
-        <div *ngFor="let msg of chatMessages" class="chat-message" [class.system]="msg.isSystemMessage"
-          [class.correct]="msg.isCorrectGuess">
-          <span class="message-user" *ngIf="!msg.isSystemMessage">
-            {{ msg.username }}:
-          </span>
-          <span class="message-text">{{ msg.message }}</span>
-          <span class="message-time">
-            {{ msg.timestamp | date:'shortTime' }}
-          </span>
-        </div>
-
-        <!-- Empty state -->
-        <div *ngIf="chatMessages.length === 0" class="chat-empty">
-          <p>No messages yet. Start chatting!</p>
+    <!-- RIGHT SIDEBAR: CHAT -->
+    <aside class="chat-sidebar">
+      <div class="chat-header">CHAT</div>
+      <div class="chat-feed" #chatMessagesContainer>
+        <div *ngFor="let msg of chatMessages" class="chat-row" [class.sys]="msg.isSystemMessage"
+          [class.hit]="msg.isCorrectGuess">
+          <span class="chat-user" *ngIf="!msg.isSystemMessage">{{ msg.username }}:</span>
+          <span class="chat-text">{{ msg.message }}</span>
         </div>
       </div>
 
-      <!-- Chat Input -->
-      <div class="chat-input">
-        <input type="text" [(ngModel)]="currentMessage" placeholder="Type your guess..." (keyup.enter)="sendMessage()"
-          [disabled]="isMyTurn || !gameStarted || roundEnded" maxlength="200" />
-        <button (click)="sendMessage()" [disabled]="isMyTurn || !gameStarted || roundEnded || !currentMessage.trim()"
-          class="btn-send">
-          Send
-        </button>
+      <div class="chat-input-area">
+        <input type="text" [(ngModel)]="currentMessage" placeholder="Type your guess here..."
+          (keyup.enter)="sendMessage()" [disabled]="isMyTurn || !gameStarted || roundEnded" />
       </div>
-
-      <!-- Chat hints -->
-      <div class="chat-hints" *ngIf="gameStarted && !roundEnded">
-        <p *ngIf="isMyTurn" class="hint-drawer">
-          You can't guess while drawing!
-        </p>
-        <p *ngIf="!isMyTurn" class="hint-guesser">
-          Type your guess and press Enter
-        </p>
-      </div>
-    </div>
-  </div> <!-- End game-layout -->
-</div> <!-- End game-container -->
+    </aside>
+  </div>
+</div>

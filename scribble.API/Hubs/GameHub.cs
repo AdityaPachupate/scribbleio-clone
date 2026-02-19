@@ -108,13 +108,15 @@ public class GameHub : Hub
             return;
         }
 
+        room.RoundNumber = 0;
         _gameManager.StartNewRound(roomCode);
 
         var drawer = room.Players.First(p => p.IsDrawing);
         await Clients.Client(drawer.ConnectionId).SendAsync("YourTurnToDraw", new
         {
             word = room.CurrentWord,
-            roundDuration = room.RoundDurationSeconds
+            roundDuration = room.RoundDurationSeconds,
+            roundNumber = room.RoundNumber
         });
 
         var maskedWord = _gameManager.GetMaskedWord(roomCode);
@@ -123,7 +125,8 @@ public class GameHub : Hub
             drawer = drawer.Username,
             wordLength = room.CurrentWord.Length,
             maskedWord = maskedWord,
-            roundDuration = room.RoundDurationSeconds
+            roundDuration = room.RoundDurationSeconds,
+            roundNumber = room.RoundNumber
         });
         _logger.LogInformation($"Game started in room {roomCode}");
     }
@@ -228,7 +231,7 @@ public class GameHub : Hub
     public async Task NextRound(string roomCode)
     {
         var room = _gameManager.GetRoom(roomCode);
-        if (room == null) return;
+        if (room == null || room.State != GameState.RoundEnd) return;
 
         // Clear everyone's canvas
         await Clients.Group(roomCode).SendAsync("ClearCanvas");
@@ -242,7 +245,8 @@ public class GameHub : Hub
         await Clients.Client(drawer.ConnectionId).SendAsync("YourTurnToDraw", new
         {
             word = room.CurrentWord,
-            roundDuration = room.RoundDurationSeconds
+            roundDuration = room.RoundDurationSeconds,
+            roundNumber = room.RoundNumber
         });
 
         // Notify guessers
@@ -252,7 +256,8 @@ public class GameHub : Hub
             drawer = drawer.Username,
             wordLength = room.CurrentWord.Length,
             maskedWord = maskedWord,
-            roundDuration = room.RoundDurationSeconds
+            roundDuration = room.RoundDurationSeconds,
+            roundNumber = room.RoundNumber
         });
     }
 

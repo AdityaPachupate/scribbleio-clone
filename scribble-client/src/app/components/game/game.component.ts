@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef, NgZone, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -65,11 +65,6 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    if (!this.roomCode || !this.username) {
-      this.router.navigate(['/']);
-      return;
-    }
-
     // Setup subscriptions BEFORE setupCanvas
     this.setupSubscriptions();
 
@@ -130,7 +125,9 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
           this.roundEnded = data.roundEnded || false;
           this.currentDrawer = data.currentDrawer || '';
           this.maskedWord = data.maskedWord || '';
-          this.roundNumber = data.roundNumber || 1;
+          this.roundNumber = data.roundNumber ?? 0;
+          this.timeRemaining = data.timeRemaining ?? 80;
+          this.isMyTurn = this.currentDrawer === this.username;
 
           // ✅ Sync chat history if provided
           if (data.chatHistory) {
@@ -184,6 +181,13 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((msg) => {
         this.ngZone.run(() => {
+          // Deduplicate system messages (e.g., join messages) within a short window
+          const lastMsg = this.chatMessages[this.chatMessages.length - 1];
+          if (msg.isSystemMessage && lastMsg && lastMsg.isSystemMessage && lastMsg.message === msg.message) {
+            console.log('Duplicate system message ignored:', msg.message);
+            return;
+          }
+
           console.log('Message received:', msg);
           this.chatMessages.push(msg);
           this.cdr.detectChanges();
@@ -202,7 +206,14 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
           this.currentDrawer = data.drawer;
           this.isMyTurn = false;
           this.maskedWord = data.maskedWord;
-          this.roundNumber = data.roundNumber || this.roundNumber + 1;
+          this.roundNumber = data.roundNumber ?? (this.roundNumber + 1);
+
+          // ✅ Update player statuses locally for immediate UI feedback
+          this.players.forEach(p => {
+            p.isDrawing = (p.username.toLowerCase() === this.currentDrawer.toLowerCase());
+            p.hasGuessedCorrectly = false;
+          });
+
           this.startTimer();
           this.cdr.detectChanges();
         });
@@ -218,7 +229,15 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
           this.currentWord = data.word;
           this.gameStarted = true;
           this.roundEnded = false;
-          this.roundNumber = data.roundNumber || this.roundNumber + 1;
+          this.currentDrawer = this.username; // I am the drawer
+          this.roundNumber = data.roundNumber ?? (this.roundNumber + 1);
+
+          // ✅ Update player statuses locally
+          this.players.forEach(p => {
+            p.isDrawing = (p.username === this.username);
+            p.hasGuessedCorrectly = false;
+          });
+
           this.startTimer();
           this.cdr.detectChanges();
         });
@@ -263,8 +282,10 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
               if (this.nextRoundCountdown <= 0) {
                 clearInterval(this.nextRoundInterval);
                 this.nextRoundInterval = null;
-                this.signalrService.nextRound(this.roomCode)
-                  .catch(err => console.error('Error starting next round:', err));
+                if (this.isHost) {
+                  this.signalrService.nextRound(this.roomCode)
+                    .catch(err => console.error('Error starting next round:', err));
+                }
               }
             });
           }, 1000);
@@ -307,20 +328,19 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
     await this.signalrService.startGame(this.roomCode);
   }
 
-  onMouseDown(event: MouseEvent): void {
-    if (!this.isMyTurn || !this.canvas) return;
-    this.isDrawing = true;
-    const rect = this.canvas.getBoundingClientRect();
-    this.lastX = event.clientX - rect.left;
-    this.lastY = event.clientY - rect.top;
-  }
-
-  onMouseMove(event: MouseEvent): void {
+  @HostListener('window:mousemove', ['$event'])
+  onWindowMouseMove(event: MouseEvent): void {
     if (!this.isDrawing || !this.isMyTurn || !this.canvas) return;
 
     const rect = this.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+
+    // Calculate scaling ratio between internal coordinates and actual display size
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    // Calculate relative coordinates and clamp to canvas bounds
+    const x = Math.max(0, Math.min(this.canvas.width, (event.clientX - rect.left) * scaleX));
+    const y = Math.max(0, Math.min(this.canvas.height, (event.clientY - rect.top) * scaleY));
 
     this.drawLine(this.lastX, this.lastY, x, y);
 
@@ -338,13 +358,27 @@ export class GameComponent implements OnInit, AfterViewInit, OnDestroy {
     this.lastY = y;
   }
 
-  onMouseUp(): void {
+  @HostListener('window:mouseup')
+  onWindowMouseUp(): void {
     this.isDrawing = false;
   }
 
-  onMouseLeave(): void {
-    this.isDrawing = false;
+  onMouseDown(event: MouseEvent): void {
+    if (!this.isMyTurn || !this.canvas) return;
+    this.isDrawing = true;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    this.lastX = Math.max(0, Math.min(this.canvas.width, (event.clientX - rect.left) * scaleX));
+    this.lastY = Math.max(0, Math.min(this.canvas.height, (event.clientY - rect.top) * scaleY));
   }
+
+  // Local handlers can be empty or removed since HostListeners handle the logic
+  onMouseMove(event: MouseEvent): void { }
+  onMouseUp(): void { }
+  onMouseLeave(): void { }
 
   private drawLine(fromX: number, fromY: number, toX: number, toY: number): void {
     if (!this.ctx) return;
