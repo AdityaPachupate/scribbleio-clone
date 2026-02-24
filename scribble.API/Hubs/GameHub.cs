@@ -5,17 +5,11 @@ using scribble.API.Services;
 
 namespace scribble.API.Hubs;
 
-public class GameHub : Hub
+public class GameHub(GameManager gameManager, ILogger<GameHub> logger) : Hub
 {
 
-    private readonly GameManager _gameManager;
-    private readonly ILogger<GameHub> _logger;
-
-    public GameHub(GameManager gameManager, ILogger<GameHub> logger)
-    {
-        _gameManager = gameManager;
-        _logger = logger;
-    }
+    private readonly GameManager _gameManager = gameManager;
+    private readonly ILogger<GameHub> _logger = logger;
 
     public async Task CreateRoom(string username)
     {
@@ -65,13 +59,11 @@ public class GameHub : Hub
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
 
-            // Sync the Joining player with current state
             await Clients.Caller.SendAsync("PlayerJoined", new
             {
                 players = room.Players,
                 newPlayer = player,
                 chatHistory = room.ChatHistory,
-                // ✅ Add full game state for mid-game join/refresh
                 gameStarted = room.State != GameState.Waiting,
                 currentDrawer = room.Players.FirstOrDefault(p => p.ConnectionId == room.CurrentDrawerId)?.Username,
                 maskedWord = _gameManager.GetMaskedWord(room.RoomCode),
@@ -79,7 +71,6 @@ public class GameHub : Hub
                 roundNumber = room.RoundNumber
             });
 
-            // Broadcast to everyone else (and the caller) that players list changed
             await Clients.Group(room.RoomCode).SendAsync("PlayersUpdated", room.Players);
 
             var systemMessage = new ChatMessage

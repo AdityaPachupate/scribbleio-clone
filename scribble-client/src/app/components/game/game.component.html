@@ -7,7 +7,7 @@
       </div>
       <div class="round-info">
         <span class="label">ROUND</span>
-        <span class="value">{{ roundNumber }} / 3</span>
+        <span class="value">{{ roundNumber }}</span>
       </div>
     </div>
 
@@ -133,8 +133,12 @@
       </div>
 
       <div class="chat-input-area">
-        <input type="text" [(ngModel)]="currentMessage" placeholder="Type your guess here..."
-          (keyup.enter)="sendMessage()" [disabled]="isMyTurn || !gameStarted || roundEnded" />
+        <div class="chat-input-wrapper">
+          <input type="text" [(ngModel)]="currentMessage" placeholder="Type your guess here..."
+            (keyup.enter)="sendMessage()" [disabled]="isMyTurn || !gameStarted || roundEnded" />
+          <button class="btn-send" (click)="sendMessage()"
+            [disabled]="isMyTurn || !gameStarted || roundEnded">SEND</button>
+        </div>
       </div>
     </aside>
   </div>

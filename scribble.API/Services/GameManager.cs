@@ -39,16 +39,14 @@ namespace scribble.API.Services
             var room = GetRoom(roomCode);
             if (room == null) return null;
 
-            // Check if player already exists by username (re-connection case)
             var player = room.Players.FirstOrDefault(p => p.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
 
             if (player != null)
             {
-                // Update connection ID for the existing player
+
                 player.ConnectionId = connectionId;
 
-                // CRITICAL: If this player was the drawer, update the Room's CurrentDrawerId
-                // because the HUB uses room.CurrentDrawerId to check permissions!
+
                 if (player.IsDrawing)
                 {
                     room.CurrentDrawerId = connectionId;
