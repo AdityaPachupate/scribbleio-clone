@@ -108,3 +108,9 @@ coverage/
 *.sqlite
 
 # End of file
+
+# Dev test files with localhost URLs
+*.http
+
+# Angular production environment (contains backend URL — set per deployment)
+scribble-client/src/environments/environment.prod.ts

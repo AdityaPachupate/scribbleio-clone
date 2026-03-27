@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { Subject } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 // Define interfaces for type safety
 export interface DrawingData {
@@ -63,9 +64,7 @@ export class SignalrService {
       return;
     }
 
-    // Use current hostname (works for both localhost and IP access)
-    const hostname = window.location.hostname;
-    const hubUrl = `http://${hostname}:5000/gamehub`;
+    const hubUrl = `${environment.apiUrl}/gamehub`;
     console.log(`Connecting to SignalR at: ${hubUrl}`);
 
     // Build connection
@@ -178,6 +177,9 @@ export class SignalrService {
   }
 
   async leaveRoom(roomCode: string): Promise<void> {
+    if (this.hubConnection) {
+      await this.hubConnection.invoke('LeaveRoom', roomCode.toUpperCase());
+    }
     await this.disconnect();
   }
 
