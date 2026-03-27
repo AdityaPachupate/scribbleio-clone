@@ -17,7 +17,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll",
         policy => policy
             .WithOrigins(
-                "https://scribble-client.onrender.com",  // production frontend
+                "https://scribbleio-clone-nv7f.vercel.app",  // production frontend
                 "http://localhost:4200"                   // local dev
             )
             .AllowAnyHeader()
