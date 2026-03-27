@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+ENV NODE_OPTIONS="--max-old-space-size=400"
+ENV CI=false
 RUN npm run build -- --configuration production
 
 FROM nginx:alpine
