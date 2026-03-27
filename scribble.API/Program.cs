@@ -16,10 +16,13 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
         policy => policy
-            .AllowAnyHeader()      // Allow any HTTP headers
-            .AllowAnyMethod()      // Allow GET, POST, etc.
-            .AllowCredentials()    // Required for SignalR
-            .SetIsOriginAllowed(_ => true));  // Allow any origin (development only!)
+            .WithOrigins(
+                "https://scribble-client.onrender.com",  // production frontend
+                "http://localhost:4200"                   // local dev
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());  // Required for SignalR
 });
 
 
