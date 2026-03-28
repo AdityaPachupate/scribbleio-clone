@@ -20,6 +20,7 @@ export class LobbyComponent implements OnInit {
   isJoining: boolean = false;
   errorMessage: string = '';
   isConnecting: boolean = false;
+  connectionStatusMessage: string = 'Connecting to server...';
 
   constructor(
     private signalrService: SignalrService,
@@ -30,11 +31,22 @@ export class LobbyComponent implements OnInit {
     this.setupSubscriptions();
 
     this.isConnecting = true;
+    this.connectionStatusMessage = 'Connecting to server...';
+
+    // If connection takes a while, notify user about Render wake up time
+    const timeoutMsg = setTimeout(() => {
+      if (this.isConnecting) {
+        this.connectionStatusMessage = 'Waking up Render backend (can take up to 50 seconds)...';
+      }
+    }, 3000);
+
     try {
       await this.signalrService.startConnection(); // ✅ Await the connection
+      clearTimeout(timeoutMsg);
       this.isConnecting = false;
       console.log('Successfully connected to SignalR');
     } catch (error) {
+      clearTimeout(timeoutMsg);
       this.isConnecting = false;
       this.errorMessage =
         'Failed to connect to game server. Please ensure the backend is running and reachable.';

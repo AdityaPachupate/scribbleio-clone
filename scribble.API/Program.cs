@@ -43,4 +43,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<GameHub>("/gamehub");
 
+app.MapGet("/health", () => Results.Ok("Healthy"));
+
 app.Run();

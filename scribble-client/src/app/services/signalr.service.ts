@@ -71,6 +71,7 @@ export class SignalrService {
     this.hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
         skipNegotiation: false,
+        timeout: 100000, // Wait up to 100 seconds for the backend to wake up
         transport: signalR.HttpTransportType.WebSockets |
           signalR.HttpTransportType.ServerSentEvents
       })
